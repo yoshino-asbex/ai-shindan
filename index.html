@@ -467,7 +467,9 @@ $('h-models').addEventListener('click',async()=>{
     if(!names.length)throw new Error('使えるモデルが見つかりませんでした。');
     names.sort().reverse();
     $('h-modellist').innerHTML=names.map(n=>'<option value="'+esc(n)+'">').join('');
-    const pick=names.find(n=>/flash/.test(n)&&!/lite/.test(n)&&!/preview|exp/.test(n))||names.find(n=>/flash/.test(n))||names[0];
+    const ver=n=>{const m=n.match(/^gemini-(\d+(?:\.\d+)?)-flash$/);return m?parseFloat(m[1]):-1};
+    const std=names.filter(n=>ver(n)>=0).sort((a,b)=>ver(b)-ver(a));
+    const pick=std[0]||names.find(n=>/flash/.test(n)&&!/lite|omni/.test(n)&&!/preview|exp/.test(n))||names.find(n=>/flash/.test(n))||names[0];
     $('h-model').value=pick;
     setStatus('h-mstatus','使えるモデルは'+names.length+'件です。「'+pick+'」を選びました。変えるときは入力欄をタップして選んでください。','okk');
   }catch(e){setStatus('h-mstatus',e instanceof TypeError?'Geminiにつながりませんでした。ネットワークを確認してください。':e.message,'err')}

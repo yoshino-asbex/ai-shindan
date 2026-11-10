@@ -112,7 +112,7 @@ body.rep-open{overflow:hidden}
 <header>
   <div>
     <h1>AI業務診断ツール</h1>
-    <p>面談の場で入力しながら、削減できる時間の目安と助成金の対象になりそうかを確認できます。数値はすべて目安で、効果や支給を保証するものではありません。入力内容はこのブラウザ内で計算し、保存しません（「HPからAI診断」でGeminiを使うときだけ、HPのURLがGoogleに送られます）。</p>
+    <p>面談の場で入力しながら、削減できる時間の目安と、助成金について社労士に確認する事項の整理ができます（対象かどうかの判断はしません）。数値はすべて目安で、効果や支給を保証するものではありません。入力内容はこのブラウザ内で計算し、保存しません（「HPからAI診断」でGeminiを使うときだけ、HPのURLがGoogleに送られます）。</p>
   </div>
   <button class="btn ghost" id="set-btn" type="button" aria-expanded="false" aria-controls="set-panel">設定</button>
 </header>
@@ -236,7 +236,8 @@ body.rep-open{overflow:hidden}
    </details>
   </div>
   <div class="panel result" aria-live="polite">
-   <h2>2. 確認結果</h2>
+   <h2>2. 確認事項の整理</h2>
+   <p class="after" style="margin:0 0 10px">このツールは、助成の対象かどうかを判断するものではありません。学校から「対象」「対象外」をお答えすることはできないため、必ず社労士にご確認ください。</p>
    <div class="verdict v-check" id="s-verdict">入力してください</div>
    <ul class="reasons" id="s-reasons"></ul>
    <div id="s-money"></div>
@@ -670,7 +671,7 @@ function parseSettings(text){
 /* ================= 助成金 ================= */
 const touched={rate:false,wage:false,cap:false};
 let isLarge=false;
-const TAG={ok:'OK',check:'要確認',ng:'難しい'};
+const TAG={ok:'入力内容',check:'社労士に確認',ng:'社労士に確認',todo:'未入力',info:'参考'};
 const fmtDate=x=>`${x.getFullYear()}年${x.getMonth()+1}月${x.getDate()}日`;
 
 function judge(){
@@ -679,44 +680,44 @@ function judge(){
   const emp=val('s-emp'), cap=val('s-cap'), n=val('s-n'), ins=val('s-ins'), ex=val('s-exec')||0;
   let sme=null,eligible=null;
 
-  if(org==='sole')add('ok','事業形態','個人事業主も対象です。資本金の定めがないため、常時雇用する労働者数で中小企業かどうかを判断します。');
-  else add('ok','事業形態','法人です。');
+  if(org==='sole')add('check','事業形態','個人事業主の場合の扱い（中小企業の判断など）は、社労士にご確認ください。');
+  else add('ok','事業形態','法人という入力です。');
 
-  if(emp===null&&cap===null)add('check','企業規模','従業員数または資本金を入力してください。');
+  if(emp===null&&cap===null)add('todo','企業規模','従業員数または資本金を入力してください。');
   else{
     sme=(emp!==null&&emp<=sec.employees)||(cap!==null&&cap<=sec.capital);
-    add('ok','企業規模',sme?`中小企業の範囲に入りそうです（${sec.label}：従業員${sec.employees}人以下 または 資本金${sec.capital.toLocaleString('ja-JP')}万円以下）。`:'大企業の扱いになりそうです。助成率・賃金助成が中小企業より低くなります。');
+    add(sme?'ok':'check','企業規模',sme?`入力からは、中小企業の範囲に入る可能性があります（${sec.label}：従業員${sec.employees}人以下 または 資本金${sec.capital.toLocaleString('ja-JP')}万円以下）。最終的な区分は社労士にご確認ください。`:'入力からは、大企業の区分になる可能性があります。区分によって助成率などが変わるため、社労士にご確認ください。');
   }
   isLarge=(sme===false);
 
-  if(n===null||ins===null)add('check','受講者','受講予定人数と、雇用保険の被保険者数を入力してください。');
+  if(n===null||ins===null)add('todo','受講者','受講予定人数と、雇用保険の被保険者数を入力してください。');
   else{
     eligible=Math.max(0,Math.min(n-ex,ins));
-    if(n===0||eligible===0)add('ng','受講者','助成の対象になる人がいません。雇用保険の被保険者で、役員でない方が対象です。');
-    else if(eligible<n)add('check','受講者',`受講${n}名のうち、助成の対象になりそうなのは${eligible}名です。役員（${ex}名）や、雇用保険に未加入の方（週20時間未満のパート・アルバイトなど）は対象外です。研修開始日に在籍していることも必要です。`);
-    else add('ok','受講者',`受講${n}名全員が対象になりそうです。`);
+    if(n===0||eligible===0)add('check','受講者','対象は、雇用保険の被保険者で役員でない方とされています。入力では該当する方がいないため、社労士にご確認ください。');
+    else if(eligible<n)add('check','受講者',`受講${n}名のうち、雇用保険の被保険者で役員でない方は${eligible}名という入力です。役員（${ex}名）や、雇用保険に未加入の方（週20時間未満のパート・アルバイトなど）の扱いは、社労士にご確認ください。`);
+    else add('ok','受講者',`受講${n}名全員が、雇用保険の被保険者で役員ではない、という入力です。`);
     if(HQ){
       const sf=HQ.pricing.sharoushiFee;
       if(n>=HQ.freeSupportMinPeople)add('ok','申請サポート',`受講者が${HQ.freeSupportMinPeople}名以上のため、TRIPORTの申請サポート費用は学校負担です。`);
-      else add('check','申請サポート',`受講者が${HQ.freeSupportMinPeople-1}名以下の場合、社労士フィー（${yen(sf.min)}〜${yen(sf.max)}、税別）は受講企業の負担です。`);
-    }else add('check','申請サポート','申請サポートの費用を誰が負担するかは、受講人数で変わります。本部の資料で確認してください。');
+      else add('info','申請サポート',`受講者が${HQ.freeSupportMinPeople-1}名以下の場合、社労士フィー（${yen(sf.min)}〜${yen(sf.max)}、税別）は受講企業の負担です。`);
+    }else add('info','申請サポート','申請サポートの費用を誰が負担するかは、受講人数で変わります。本部の資料で確認してください。');
   }
 
-  if($('s-excl').value==='y')add('ng','対象外の業種','接待を伴う飲食業、性風俗関連、暴力団関係の企業は対象外です。');
-  else add('ok','対象外の業種','対象外の業種には該当しません。');
+  if($('s-excl').value==='y')add('check','対象外の業種','接待を伴う飲食業、性風俗関連、暴力団関係は、対象外とされている業種です。入力では当たるため、社労士にご確認ください。');
+  else add('ok','対象外の業種','対象外とされている業種には当たらない、という入力です。');
 
-  const pick=(id,t,map)=>{const v=$(id).value;if(v==='')add('check',t,'選択してください。');else add(...map[v])};
-  pick('s-labor','労務管理',{y:['ok','労務管理','適切な労務管理が行われています。'],u:['check','労務管理','社会保険料・残業代の支払い、法令違反がないことを確認してください。'],n:['ng','労務管理','適切な労務管理が行われていない場合は対象外になります。']});
-  pick('s-course','対象コース',{y:['ok','対象コース',`対象コース（${SUB.targetCourse}）です。`],u:['check','対象コース',`対象は${SUB.targetCourse}のみです。コースを確認してください。`],n:['ng','対象コース',`対象は${SUB.targetCourse}のみです。それ以外のコースは対象外です。`]});
-  pick('s-tele','テレワーク規定',{y:['ok','テレワーク規定','自宅などで受講する場合でも、就業規則にテレワーク規定があります。'],off:['ok','テレワーク規定','事業所内で受講するため、この点は問題になりません。'],u:['check','テレワーク規定','自宅などで受講する人がいる場合は、就業規則にテレワーク規定があるか確認してください。'],n:['check','テレワーク規定','自宅などで受講する人がいる場合は、就業規則にテレワーク規定が必要になります。規定を整えるか、事業所内で受講する形にすれば、この点は問題になりません。（要確認）']});
-  pick('s-hours','受講時間',{y:['ok','受講時間',`所定労働時間内に1人${SUB.minHoursPerPerson}時間以上を確保できます。雇用保険の適用事業所番号が異なる事業所が複数ある場合は、事業所ごとに1人${SUB.minHoursPerPerson}時間が必要です。`],u:['check','受講時間','「業務をしながら」の視聴は不可です。業務を離れた研修時間を確保できるか調整が必要です。'],n:['ng','受講時間',`所定労働時間内に1人${SUB.minHoursPerPerson}時間以上を確保できないと対象外になります。`]});
+  const pick=(id,t,map)=>{const v=$(id).value;if(v==='')add('todo',t,'選択してください。');else add(...map[v])};
+  pick('s-labor','労務管理',{y:['ok','労務管理','適切に行っている、という入力です。'],u:['check','労務管理','社会保険料・残業代の支払い、法令違反がないかは、社労士にご確認ください。'],n:['check','労務管理','労務管理の状況は、助成の要件に関わるとされています。社労士にご確認ください。']});
+  pick('s-course','対象コース',{y:['ok','対象コース',`対象コース（${SUB.targetCourse}）を受講する、という入力です。`],u:['check','対象コース',`対象は${SUB.targetCourse}とされています。受講するコースをご確認ください。`],n:['check','対象コース',`対象は${SUB.targetCourse}とされています。それ以外のコースの扱いは、社労士にご確認ください。`]});
+  pick('s-tele','オンライン受講の場所',{y:['ok','オンライン受講の場所','自宅などで受講する人がいて、就業規則にテレワーク規定がある、という入力です。'],off:['ok','オンライン受講の場所','全員、会社の事業所内で受講する、という入力です。'],u:['check','オンライン受講の場所','自宅などで受講する人がいる場合の、就業規則のテレワーク規定の扱いは、社労士にご確認ください。'],n:['check','オンライン受講の場所','自宅などで受講する人がいる場合の、就業規則のテレワーク規定の扱いは、社労士にご確認ください。']});
+  pick('s-hours','受講時間',{y:['ok','受講時間',`所定労働時間内に1人${SUB.minHoursPerPerson}時間以上を確保できる、という入力です。事業所が複数ある場合（雇用保険の適用事業所番号が異なる場合）の扱いは、社労士にご確認ください。`],u:['check','受講時間',`所定労働時間内の受講時間の確保（1人${SUB.minHoursPerPerson}時間以上）や、業務をしながらの視聴の扱いは、社労士にご確認ください。`],n:['check','受講時間',`所定労働時間内に1人${SUB.minHoursPerPerson}時間以上を確保することが、要件とされています。社労士にご確認ください。`]});
 
   const sd=$('s-start').value;
-  if(!sd)add('check','計画届',`研修の開始予定日を入力してください。開始の${SUB.planLeadMonths}か月前までに計画届の提出が必要です。`);
+  if(!sd)add('todo','計画届',`研修の開始予定日を入力してください。開始の${SUB.planLeadMonths}か月前までに計画届の提出が必要です。`);
   else{
     const d=new Date(sd+'T00:00:00'),today=new Date();today.setHours(0,0,0,0);
     const lim=new Date(d);lim.setMonth(lim.getMonth()-SUB.planLeadMonths);
-    if(lim<today)add('ng','計画届',`計画届の提出期限（${fmtDate(lim)}）をすぎています。開始日を後ろにずらす必要があります。`);
+    if(lim<today)add('check','計画届',`計画届の提出期限の目安（${fmtDate(lim)}）をすぎています。開始日の扱いは、社労士にご確認ください。`);
     else{const left=Math.ceil((lim-today)/86400000);add(left<=14?'check':'ok','計画届',`提出期限の目安は${fmtDate(lim)}です（あと${left}日）。`)}
     if(d>new Date(SUB.validUntil+'T00:00:00'))add('check','制度の期限',`このコースは${SUB.validUntilLabel}までです。開始日が期限を過ぎていないか確認してください。`);
   }
@@ -739,12 +740,12 @@ function moneyBlock(eligible,n){
 
 function calcSub(){
   const {R,eligible,n}=judge();
-  const hasNg=R.some(r=>r.lv==='ng'), hasCk=R.some(r=>r.lv==='check');
-  const label=hasNg?'難しい':hasCk?'要確認':'対象になりそう';
+  const ck=R.filter(r=>r.lv==='check'||r.lv==='ng').length;
+  const label=`社労士に確認する項目：${ck}件`;
   const v=$('s-verdict');
-  v.className='verdict '+(hasNg?'v-ng':hasCk?'v-check':'v-ok');
+  v.className='verdict v-check';
   v.textContent=label;
-  $('s-reasons').innerHTML=R.map(r=>`<li class="r-${r.lv}"><span class="tag">${TAG[r.lv]}　${esc(r.t)}</span><span>${esc(r.m)}</span></li>`).join('');
+  $('s-reasons').innerHTML=R.map(r=>`<li class="r-${({todo:'check',info:'ok'})[r.lv]||r.lv}"><span class="tag">${TAG[r.lv]}　${esc(r.t)}</span><span>${esc(r.m)}</span></li>`).join('');
 
   const m=moneyBlock(eligible,n);
   $('s-money').innerHTML=m?`<h3>金額の目安（対象${m.eligible}名・上限や審査の結果によって変わります）</h3>
@@ -757,7 +758,7 @@ function calcSub(){
     <div class="after">助成金は研修終了後の後払いです。審査の結果、支給されない場合があります。</div>`
     :(HQ?'':'<p class="hint">金額の目安を出すには、右上の「設定」に設定コードを貼るか、受講料・助成率などを直接入力してください。</p>');
 
-  const lines=[`【助成金かんたん確認メモ】${SUB.courseName}（${SUB.validUntilLabel}まで）`,`確認結果：${label}`,'',
+  const lines=[`【助成金 確認事項メモ】${SUB.courseName}（${SUB.validUntilLabel}まで）`,'このメモは、助成の対象かどうかを判断するものではありません。対象かどうか・要件の解釈は、社労士にご確認ください。',`入力内容の整理：${label}`,'',
     ...R.map(r=>`・[${TAG[r.lv]}] ${r.t}：${r.m}`)];
   if(m)lines.push('',`金額の目安（対象${m.eligible}名）`,`・受講料の先払い（税抜${m.plan?`、${m.plan.min}〜${m.plan.max}名の定額プラン`:''}）：${yen(m.pay)}`,`・経費助成の見込み（後払い）：${yen(m.keihi)}（助成率${$('s-rate').value||0}%、1人あたり年間上限${yen(val('s-cap1')||0)}）`,`・助成が支給された場合の会社の負担${m.sf?'（社労士フィー別）':''}：${yen(m.after)}`,`・支給されなかった場合の会社の負担${m.sf?'（社労士フィー別）':''}：${yen(m.pay)}`,...(m.sf?[`・社労士フィー（受講企業の負担・税別）：${yen(m.sf.min)}〜${yen(m.sf.max)}`]:[]),`・参考：賃金助成の見込み ${yen(m.chingin)}（要確認・上の負担には含めていません）`);
   lines.push('',`※${SUB.disclaimer}`);

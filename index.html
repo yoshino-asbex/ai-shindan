@@ -219,7 +219,7 @@ body.rep-open{overflow:hidden}
      <div><label for="s-labor">社会保険料・残業代の支払いなど、労務管理は適切</label><select id="s-labor"><option value="">選択してください</option><option value="y">はい</option><option value="u">わからない</option><option value="n">いいえ</option></select></div>
      <div><label for="s-excl">対象外の業種（接待を伴う飲食業・性風俗関連・暴力団関係）に該当</label><select id="s-excl"><option value="n">該当しない</option><option value="y">該当する</option></select></div>
      <div><label for="s-course">受講するコース</label><select id="s-course"><option value="">選択してください</option><option value="y"></option><option value="u">未定</option><option value="n">それ以外のコース</option></select></div>
-     <div><label for="s-tele">オンライン受講の場合、就業規則にテレワーク規定がある</label><select id="s-tele"><option value="">選択してください</option><option value="y">ある</option><option value="u">わからない</option><option value="n">ない</option><option value="off">オンライン受講はしない</option></select></div>
+     <div><label for="s-tele">オンライン受講の場所（自宅などで受講する人がいる場合は、就業規則のテレワーク規定）</label><select id="s-tele"><option value="">選択してください</option><option value="off">全員、会社の事業所内で受講する（自宅などでは受講しない）</option><option value="y">自宅などで受講する人がいる ／ テレワーク規定がある</option><option value="n">自宅などで受講する人がいる ／ テレワーク規定がない</option><option value="u">自宅などで受講する人がいる ／ 規定の有無がわからない</option></select></div>
      <div><label for="s-hours" id="s-hours-l">所定労働時間内に、1人あたり必要な受講時間を確保できる</label><select id="s-hours"><option value="">選択してください</option><option value="y">できる</option><option value="u">調整が必要</option><option value="n">できない</option></select></div>
      <div><label for="s-start">研修の開始予定日</label><input type="date" id="s-start"></div>
    </div>
@@ -708,7 +708,7 @@ function judge(){
   const pick=(id,t,map)=>{const v=$(id).value;if(v==='')add('check',t,'選択してください。');else add(...map[v])};
   pick('s-labor','労務管理',{y:['ok','労務管理','適切な労務管理が行われています。'],u:['check','労務管理','社会保険料・残業代の支払い、法令違反がないことを確認してください。'],n:['ng','労務管理','適切な労務管理が行われていない場合は対象外になります。']});
   pick('s-course','対象コース',{y:['ok','対象コース',`対象コース（${SUB.targetCourse}）です。`],u:['check','対象コース',`対象は${SUB.targetCourse}のみです。コースを確認してください。`],n:['ng','対象コース',`対象は${SUB.targetCourse}のみです。それ以外のコースは対象外です。`]});
-  pick('s-tele','テレワーク規定',{y:['ok','テレワーク規定','就業規則にテレワーク規定があります。'],off:['ok','テレワーク規定','オンライン受講をしないため不要です。'],u:['check','テレワーク規定','就業規則を確認してください。オンライン受講には規定が必要です。'],n:['ng','テレワーク規定','オンライン受講には、就業規則へのテレワーク規定の追加が必要です。']});
+  pick('s-tele','テレワーク規定',{y:['ok','テレワーク規定','自宅などで受講する場合でも、就業規則にテレワーク規定があります。'],off:['ok','テレワーク規定','事業所内で受講するため、この点は問題になりません。'],u:['check','テレワーク規定','自宅などで受講する人がいる場合は、就業規則にテレワーク規定があるか確認してください。'],n:['check','テレワーク規定','自宅などで受講する人がいる場合は、就業規則にテレワーク規定が必要になります。規定を整えるか、事業所内で受講する形にすれば、この点は問題になりません。（要確認）']});
   pick('s-hours','受講時間',{y:['ok','受講時間',`所定労働時間内に1人${SUB.minHoursPerPerson}時間以上を確保できます。雇用保険の適用事業所番号が異なる事業所が複数ある場合は、事業所ごとに1人${SUB.minHoursPerPerson}時間が必要です。`],u:['check','受講時間','「業務をしながら」の視聴は不可です。業務を離れた研修時間を確保できるか調整が必要です。'],n:['ng','受講時間',`所定労働時間内に1人${SUB.minHoursPerPerson}時間以上を確保できないと対象外になります。`]});
 
   const sd=$('s-start').value;

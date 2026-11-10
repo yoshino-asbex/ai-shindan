@@ -151,7 +151,10 @@ textarea.short{min-height:110px}
      <input type="password" id="h-key" autocomplete="off" spellcheck="false" placeholder="AIza...">
      <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="h-keysave" style="width:auto"> このブラウザにキーを保存する（共有のPCでは保存しないでください）</label>
      <label for="h-model">モデル名</label>
-     <input type="text" id="h-model" autocomplete="off" spellcheck="false">
+     <input type="text" id="h-model" list="h-modellist" autocomplete="off" spellcheck="false">
+     <datalist id="h-modellist"></datalist>
+     <div style="margin-top:8px"><button class="btn ghost" id="h-models" type="button">使えるモデルを調べる</button></div>
+     <p class="status" id="h-mstatus" role="status"></p>
      <p class="hint">キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で、Googleアカウントがあれば無料で作れます。キーは自分だけで使い、他の人に渡さないでください。</p>
      <p class="hint">送信されるのは、HPのURLと依頼文だけです。無料枠では、入力内容がGoogleの製品改善に使われます。個人情報や機密は入れないでください。</p>
      <div style="margin-top:10px"><button class="btn" id="h-run" type="button">HPを読んで20個作る</button></div>
@@ -421,7 +424,8 @@ async function callGemini(key,model,prompt){
     });
     if(!res.ok){
       const map={400:'キーかモデル名が正しくないようです。',403:'このキーは使えません（権限・地域・キーの制限を確認してください）。',404:'モデル名が見つかりません。モデル名を確認してください。',429:'無料枠の回数や量の上限に達しました。しばらく待ってからやり直してください。'};
-      throw new Error((map[res.status]||'Geminiからエラーが返りました。')+`（${res.status}）`);
+      const e=new Error((map[res.status]||(res.status===503?'Googleのサーバーが混み合っています。少し待つか、「使えるモデルを調べる」で別のモデルを選んでください。':'Geminiからエラーが返りました。'))+`（${res.status}）`);
+      e.status=res.status;throw e;
     }
     const j=await res.json();
     const c=j.candidates&&j.candidates[0];
@@ -439,6 +443,35 @@ async function callGemini(key,model,prompt){
     throw e;
   }
 }
+async function callGeminiRetry(key,model,prompt){
+  for(let i=0;;i++){
+    try{return await callGemini(key,model,prompt)}
+    catch(e){
+      if(e.status!==503||i>=2)throw e;
+      setStatus('h-status','Googleが混み合っています。しばらくしてやり直します（'+(i+1)+'/2）…');
+      await new Promise(r=>setTimeout(r,5000));
+    }
+  }
+}
+$('h-models').addEventListener('click',async()=>{
+  const key=$('h-key').value.trim();
+  if(!key){setStatus('h-mstatus','先にGemini APIキーを入力してください。','err');return}
+  setStatus('h-mstatus','調べています…');
+  try{
+    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',{headers:{'x-goog-api-key':key}});
+    if(!res.ok)throw new Error('モデル一覧を取得できませんでした（'+res.status+'）。キーを確認してください。');
+    const j=await res.json();
+    const names=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent'))
+      .map(m=>String(m.name).replace(/^models\//,''))
+      .filter(n=>/^gemini-/.test(n)&&!/(tts|image|audio|live|embedding|robotics|computer-use|customtools)/.test(n));
+    if(!names.length)throw new Error('使えるモデルが見つかりませんでした。');
+    names.sort().reverse();
+    $('h-modellist').innerHTML=names.map(n=>'<option value="'+esc(n)+'">').join('');
+    const pick=names.find(n=>/flash/.test(n)&&!/lite/.test(n)&&!/preview|exp/.test(n))||names.find(n=>/flash/.test(n))||names[0];
+    $('h-model').value=pick;
+    setStatus('h-mstatus','使えるモデルは'+names.length+'件です。「'+pick+'」を選びました。変えるときは入力欄をタップして選んでください。','okk');
+  }catch(e){setStatus('h-mstatus',e instanceof TypeError?'Geminiにつながりませんでした。ネットワークを確認してください。':e.message,'err')}
+});
 $('h-run').addEventListener('click',async()=>{
   const url=normalizeUrl($('h-url').value), key=$('h-key').value.trim(), model=$('h-model').value.trim()||GM.model;
   if(!url){setStatus('h-status','HPのURLを正しく入力してください（例：https://example.co.jp/）。','err');return}
@@ -446,7 +479,7 @@ $('h-run').addEventListener('click',async()=>{
   if($('h-keysave').checked)store.set(KEY_GEM,key);else store.del(KEY_GEM);
   const btn=$('h-run');btn.disabled=true;setStatus('h-status','HPを読んでいます。30秒〜1分ほどかかります…');
   try{
-    const {text,warn}=await callGemini(key,model,buildPrompt(url,val('h-emp')));
+    const {text,warn}=await callGeminiRetry(key,model,buildPrompt(url,val('h-emp')));
     const r=parseAiResult(text);applyAiResult(r);
     setStatus('h-status',`${r.tasks.length}個作りました。`+(warn?warn:'下の事業内容が実際と合っているか確認してください。'),warn?'':'okk');
   }catch(e){setStatus('h-status',e.message,'err')}

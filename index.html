@@ -424,11 +424,14 @@ async function callGemini(key,model,prompt,useUrl=true){
     const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
       method:'POST',signal:ctl.signal,
       headers:{'Content-Type':'application/json','x-goog-api-key':key},
-      body:JSON.stringify(Object.assign({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.3}},useUrl?{tools:[{url_context:{}}]}:{}))
+      body:JSON.stringify(Object.assign({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.3}},
+        useUrl==='search'?{tools:[{google_search:{}}]}:useUrl?{tools:[{url_context:{}}]}:{}))
     });
     if(!res.ok){
+      let detail='';
+      try{const jb=await res.json();detail=String(jb&&jb.error&&jb.error.message||'').slice(0,160)}catch(x){}
       const map={400:'キーかモデル名が正しくないようです。',403:'このキーは使えません（権限・地域・キーの制限を確認してください）。',404:'モデル名が見つかりません。モデル名を確認してください。',429:'無料枠の回数や量の上限に達しました。しばらく待ってからやり直してください。'};
-      const e=new Error((map[res.status]||(res.status===503?'Googleのサーバーが混み合っています。少し待つか、「使えるモデルを調べる」で別のモデルを選んでください。':'Geminiからエラーが返りました。'))+`（${res.status}）`);
+      const e=new Error((map[res.status]||(res.status===503?'Googleのサーバーが混み合っています。少し待つか、「使えるモデルを調べる」で別のモデルを選んでください。':'Geminiからエラーが返りました。'))+`（${res.status}）`+(detail&&res.status!==404?` Googleからの説明：${detail}`:''));
       e.status=res.status;throw e;
     }
     const j=await res.json();
@@ -436,10 +439,11 @@ async function callGemini(key,model,prompt,useUrl=true){
     const text=c&&c.content&&c.content.parts?c.content.parts.map(x=>x.text||'').join(''):'';
     if(!text)throw new Error('Geminiから結果が返りませんでした。URLを読めなかった可能性があります。');
     if(!useUrl)return {text,warn:''};
+    if(useUrl==='search')return {text,warn:'HPを直接読めなかったため、検索で調べました。事業内容が実際と合っているか、必ず確認してください。'};
     const meta=c.urlContextMetadata&&c.urlContextMetadata.urlMetadata;
     let warn='';
     if(Array.isArray(meta)&&meta.length&&!meta.some(m=>/SUCCESS/.test(String(m.urlRetrievalStatus))))
-      throw new Error('HPを読み込めませんでした。ログインが必要なページや、アクセスを制限しているサイトは読めません。');
+      {const ue=new Error('HPを読み込めませんでした。ログインが必要なページや、アクセスを制限しているサイトは読めません。');ue.urlFail=true;throw ue}
     if(!Array.isArray(meta)||!meta.length)warn='HPを実際に読めたかを確認できませんでした。下の事業内容が合っているか確認してください。';
     return {text,warn};
   }catch(e){
@@ -486,7 +490,14 @@ $('h-run').addEventListener('click',async()=>{
   if($('h-keysave').checked)store.set(KEY_GEM,key);else store.del(KEY_GEM);
   const btn=$('h-run');btn.disabled=true;setStatus('h-status','HPを読んでいます。30秒〜1分ほどかかります…');
   try{
-    const {text,warn}=await callGeminiRetry(key,model,buildPrompt(url,val('h-emp')));
+    let res;
+    try{res=await callGeminiRetry(key,model,buildPrompt(url,val('h-emp')))}
+    catch(e){
+      if(!(e.urlFail||e.status===503||e.status===500))throw e;
+      setStatus('h-status','HPを直接読めませんでした。検索で調べ直します…');
+      res=await callGeminiRetry(key,model,buildPrompt(url,val('h-emp'))+'\n- ページを直接読めない場合は、Google検索でこの会社（URLのドメイン名や社名）を調べて把握してください。',  'search');
+    }
+    const {text,warn}=res;
     const r=parseAiResult(text);applyAiResult(r);
     setStatus('h-status',`${r.tasks.length}個作りました。`+(warn?warn:'下の事業内容が実際と合っているか確認してください。'),warn?'':'okk');
   }catch(e){setStatus('h-status',e.message,'err')}

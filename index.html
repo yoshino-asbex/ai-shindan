@@ -94,6 +94,17 @@ textarea.short{min-height:110px}
   .tt td.num{grid-column:2/5;text-align:left}
 }
 @media print{.tabs,.btn,details summary,#set-panel{display:none}.result{position:static}body{background:#fff}}
+#rep-overlay{position:fixed;inset:0;z-index:50;overflow:auto;background:#5b6b70;padding:0 8px 24px}
+.rep-bar{position:sticky;top:0;z-index:1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0;background:#5b6b70}
+.rep-bar .btn.ghost{background:#fff}
+.rep-bar .hint{color:#fff;margin:0;flex:1 1 240px}
+body.rep-open{overflow:hidden}
+@media print{
+  body.rep-open>*:not(#rep-overlay){display:none!important}
+  body.rep-open #rep-overlay{position:static;overflow:visible;background:#fff;padding:0}
+  body.rep-open .rep-bar{display:none}
+  body.rep-open{overflow:visible}
+}
 </style>
 </head>
 <body>
@@ -239,7 +250,16 @@ textarea.short{min-height:110px}
 </section>
 </div>
 
+<div id="rep-overlay" hidden>
+  <div class="rep-bar">
+    <button class="btn ghost" id="rep-close" type="button">閉じる</button>
+    <button class="btn" id="rep-print" type="button">印刷／PDFに保存</button>
+    <span class="hint">スマホ・PCとも、印刷の画面で送信先を「PDFに保存」にするとPDFになります。</span>
+  </div>
+  <div id="rep-body"></div>
+</div>
 <script src="config.js"></script>
+<script src="report.js"></script>
 <script>
 (function(){
 'use strict';
@@ -288,6 +308,18 @@ function mount(p){
    <details><summary>お客様に渡す診断メモ（コピー用）</summary>
      <textarea id="${p}-memo" readonly></textarea>
      <button class="btn" id="${p}-copy" type="button" style="margin-top:8px">メモをコピー</button><span class="toast" id="${p}-toast"></span>
+   </details>
+   <details open><summary>お客様に渡す資料（PDF・PowerPoint）</summary>
+     <div class="row">
+       <div><label for="${p}-cust">お客様名（会社名）</label><input type="text" id="${p}-cust" maxlength="60" autocomplete="off"></div>
+       <div><label for="${p}-auth">作成者（所属・氏名）</label><input type="text" id="${p}-auth" maxlength="60" autocomplete="off"></div>
+     </div>
+     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+       <button class="btn" id="${p}-rep" type="button">資料を表示（印刷・PDF保存）</button>
+       <button class="btn ghost" id="${p}-ppt" type="button">PowerPointで保存</button>
+     </div>
+     <p class="hint">全ての業務の数字を、A4の資料にします。PowerPointはWeb商談の画面共有用です（インターネット接続が必要です）。</p>
+     <p class="status" id="${p}-repst" role="status"></p>
    </details>
    <p class="note" id="${p}-note"></p>`;
 }
@@ -370,6 +402,48 @@ let hpSummary='';
 const H=makeTool('h',()=>`【AI業務診断メモ（HPをもとにした推定）】${hpSummary?'\n事業内容（AIの読み取り）：'+hpSummary:''}`,
   DG.disclaimer+' HPからの業務の洗い出しと、回数・時間・削減率はAIによる推定です。お客様に確認して直してください。');
 $('h-clear').addEventListener('click',()=>{hpSummary='';$('h-summary').hidden=true;H.set([])});
+
+/* ================= お客様に渡す資料（report.js） ================= */
+const KEY_AUTH='ai-shindan-author';
+function reportData(p,T,summary){
+  const w=num($(p+'-wage').value);
+  const rows=T.rows.filter(r=>r.on&&String(r.name||'').trim()).map(r=>{
+    const now=num(r.cnt)*num(r.min)/60, rate=clamp(num(r.rate),0,100);
+    return {name:String(r.name).trim(),cnt:num(r.cnt),min:num(r.min),rate,ai:String(r.ai||'').trim(),now,save:now*rate/100};
+  }).sort((a,b)=>b.save-a.save);
+  const now=rows.reduce((s,r)=>s+r.now,0), save=rows.reduce((s,r)=>s+r.save,0);
+  return {kind:p,customer:$(p+'-cust').value.trim(),author:$(p+'-auth').value.trim(),date:new Date(),wage:w,rows,now,save,year:save*12,yen:save*12*w,pct:now?save/now:0,summary:summary||''};
+}
+function wireReport(p,T,getSummary){
+  const au=$(p+'-auth');au.value=store.get(KEY_AUTH)||'';
+  au.addEventListener('input',()=>{store.set(KEY_AUTH,au.value);['d','h'].forEach(q=>{if(q!==p)$(q+'-auth').value=au.value})});
+  const get=()=>{
+    const d=reportData(p,T,getSummary());
+    if(!d.rows.length){setStatus(p+'-repst','業務名を1つ以上入力してください。','err');return null}
+    setStatus(p+'-repst','');return d;
+  };
+  $(p+'-rep').addEventListener('click',()=>{
+    const d=get();if(!d)return;
+    $('rep-body').innerHTML=window.AIReport.html(d);
+    $('rep-overlay').dataset.title=window.AIReport.fileBase(d);
+    $('rep-overlay').hidden=false;$('rep-overlay').scrollTop=0;document.body.classList.add('rep-open');
+  });
+  $(p+'-ppt').addEventListener('click',async()=>{
+    const d=get();if(!d)return;
+    const b=$(p+'-ppt');b.disabled=true;setStatus(p+'-repst','PowerPointを作っています…');
+    try{await window.AIReport.pptx(d);setStatus(p+'-repst','PowerPointを保存しました。ダウンロード先のフォルダを確認してください。','okk')}
+    catch(e){setStatus(p+'-repst',e.message||'PowerPointを作れませんでした。','err')}
+    finally{b.disabled=false}
+  });
+}
+$('rep-close').addEventListener('click',()=>{$('rep-overlay').hidden=true;document.body.classList.remove('rep-open')});
+$('rep-print').addEventListener('click',()=>{
+  const old=document.title;document.title=$('rep-overlay').dataset.title||old;
+  const back=()=>{document.title=old;window.removeEventListener('afterprint',back)};
+  window.addEventListener('afterprint',back);window.print();
+});
+wireReport('d',D,()=>'');
+wireReport('h',H,()=>hpSummary);
 
 function normalizeUrl(s){
   let u=String(s||'').trim();

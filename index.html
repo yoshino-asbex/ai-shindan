@@ -155,8 +155,8 @@ textarea.short{min-height:110px}
      <input type="password" id="h-key" autocomplete="off" spellcheck="false" placeholder="AIza...">
      <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="h-keysave" style="width:auto"> このブラウザにキーを保存する（共有のPCでは保存しないでください）</label>
      <label for="h-model">モデル名</label>
-     <input type="text" id="h-model" list="h-modellist" autocomplete="off" spellcheck="false">
-     <datalist id="h-modellist"></datalist>
+     <input type="text" id="h-model" autocomplete="off" spellcheck="false">
+     <select id="h-modelsel" aria-label="使えるモデルから選ぶ" hidden style="margin-top:8px"></select>
      <div style="margin-top:8px"><button class="btn ghost" id="h-models" type="button">使えるモデルを調べる</button></div>
      <p class="status" id="h-mstatus" role="status"></p>
      <p class="hint">キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で、Googleアカウントがあれば無料で作れます。キーは自分だけで使い、他の人に渡さないでください。</p>
@@ -452,16 +452,30 @@ async function callGemini(key,model,prompt,useUrl=true){
     throw e;
   }
 }
+let MODEL_CANDS=[];
 async function callGeminiRetry(key,model,prompt,useUrl=true,statusId='h-status'){
-  for(let i=0;;i++){
-    try{return await callGemini(key,model,prompt,useUrl)}
-    catch(e){
-      if(e.status!==503||i>=2)throw e;
-      setStatus(statusId,'Googleが混み合っています。しばらくしてやり直します（'+(i+1)+'/2）…');
-      await new Promise(r=>setTimeout(r,5000));
+  const order=[model,...MODEL_CANDS.filter(m=>m!==model)].slice(0,4);
+  for(let mi=0;mi<order.length;mi++){
+    let err;
+    for(let i=0;;i++){
+      try{
+        const r=await callGemini(key,order[mi],prompt,useUrl);
+        if(mi>0){$('h-model').value=order[mi];if($('h-modelsel').querySelector('option[value="'+order[mi]+'"]'))$('h-modelsel').value=order[mi]}
+        return r;
+      }catch(e){
+        err=e;
+        if(e.status===503&&i<2){
+          setStatus(statusId,'Googleが混み合っています。しばらくしてやり直します（'+(i+1)+'/2）…');
+          await new Promise(r=>setTimeout(r,5000));continue;
+        }
+        break;
+      }
     }
+    if(err.status!==429||mi===order.length-1)throw err;
+    setStatus(statusId,'このモデルは無料枠の上限です。別のモデル（'+order[mi+1]+'）で試します…');
   }
 }
+$('h-modelsel').addEventListener('change',()=>{$('h-model').value=$('h-modelsel').value});
 $('h-models').addEventListener('click',async()=>{
   const key=$('h-key').value.trim();
   if(!key){setStatus('h-mstatus','先にGemini APIキーを入力してください。','err');return}
@@ -475,12 +489,16 @@ $('h-models').addEventListener('click',async()=>{
       .filter(n=>/^gemini-/.test(n)&&!/(tts|image|audio|live|embedding|robotics|computer-use|customtools)/.test(n));
     if(!names.length)throw new Error('使えるモデルが見つかりませんでした。');
     names.sort().reverse();
-    $('h-modellist').innerHTML=names.map(n=>'<option value="'+esc(n)+'">').join('');
     const ver=n=>{const m=n.match(/^gemini-(\d+(?:\.\d+)?)-flash$/);return m?parseFloat(m[1]):-1};
     const std=names.filter(n=>ver(n)>=0).sort((a,b)=>ver(b)-ver(a));
     const pick=std[0]||names.find(n=>/flash/.test(n)&&!/lite|omni/.test(n)&&!/preview|exp/.test(n))||names.find(n=>/flash/.test(n))||names[0];
     $('h-model').value=pick;
-    setStatus('h-mstatus','使えるモデルは'+names.length+'件です。「'+pick+'」を選びました。変えるときは入力欄をタップして選んでください。','okk');
+    const sel=$('h-modelsel');
+    sel.innerHTML=names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
+    sel.value=pick;sel.hidden=false;
+    const fv=n=>{const m=n.match(/^gemini-(\d+(?:\.\d+)?)-flash(-lite)?$/);return m?parseFloat(m[1])*10+(m[2]?0:1):-1};
+    MODEL_CANDS=names.filter(n=>fv(n)>=0).sort((a,b)=>fv(b)-fv(a));
+    setStatus('h-mstatus','使えるモデルは'+names.length+'件です。「'+pick+'」を選びました。変えるときは下の選択欄から選んでください。上限に達したときは、自動で別のモデルを試します。','okk');
   }catch(e){setStatus('h-mstatus',e instanceof TypeError?'Geminiにつながりませんでした。ネットワークを確認してください。':e.message,'err')}
 });
 $('h-run').addEventListener('click',async()=>{

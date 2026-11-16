@@ -119,7 +119,7 @@ body.rep-open{overflow:hidden}
 <div class="panel setpanel" id="set-panel" hidden>
   <h2>設定コード（助成率・料金表などの数字）</h2>
   <p class="hint">助成金の金額計算に使う数字（助成率・上限・料金表など）は、このツールのファイルには入っていません。社内で共有された設定コードを貼ると、このブラウザにだけ保存されます。</p>
-  <textarea class="short" id="set-code" aria-label="設定コード" placeholder='{"rates":{...},"pricing":{...},"freeSupportMinPeople":4}'></textarea>
+  <textarea class="short" id="set-code" aria-label="設定コード" placeholder='{"rates":{...},"pricing":{...}}'></textarea>
   <div style="margin-top:8px"><button class="btn" id="set-apply" type="button">反映する</button> <button class="btn ghost" id="set-clear" type="button">削除する</button></div>
   <p class="status" id="set-status" role="status"></p>
 </div>
@@ -219,8 +219,7 @@ body.rep-open{overflow:hidden}
      <div><label for="s-labor">社会保険料・残業代の支払いなど、労務管理は適切</label><select id="s-labor"><option value="">選択してください</option><option value="y">はい</option><option value="u">わからない</option><option value="n">いいえ</option></select></div>
      <div><label for="s-excl">対象外の業種（接待を伴う飲食業・性風俗関連・暴力団関係）に該当</label><select id="s-excl"><option value="n">該当しない</option><option value="y">該当する</option></select></div>
      <div><label for="s-course">受講するコース</label><select id="s-course"><option value="">選択してください</option><option value="y"></option><option value="u">未定</option><option value="n">それ以外のコース</option></select></div>
-     <div><label for="s-tele">オンライン受講の場所（自宅などで受講する人がいる場合は、就業規則のテレワーク規定）</label><select id="s-tele"><option value="">選択してください</option><option value="off">全員、会社の事業所内で受講する（自宅などでは受講しない）</option><option value="y">自宅などで受講する人がいる ／ テレワーク規定がある</option><option value="n">自宅などで受講する人がいる ／ テレワーク規定がない</option><option value="u">自宅などで受講する人がいる ／ 規定の有無がわからない</option></select></div>
-     <div><label for="s-hours" id="s-hours-l">所定労働時間内に、1人あたり必要な受講時間を確保できる</label><select id="s-hours"><option value="">選択してください</option><option value="y">できる</option><option value="u">調整が必要</option><option value="n">できない</option></select></div>
+          <div><label for="s-hours" id="s-hours-l">所定労働時間内に、1人あたり必要な受講時間を確保できる</label><select id="s-hours"><option value="">選択してください</option><option value="y">できる</option><option value="u">調整が必要</option><option value="n">できない</option></select></div>
      <div><label for="s-start">研修の開始予定日</label><input type="date" id="s-start"></div>
    </div>
    <details open><summary>金額の目安を出す（任意）</summary>
@@ -659,13 +658,11 @@ function parseSettings(text){
   const rt=o&&o.rates;
   if(!rt||!['sme','large'].every(k=>rt[k]&&isN(rt[k].expenseRate)&&rt[k].expenseRate<=100&&isN(rt[k].wagePerHour)&&isN(rt[k].expenseCapPerPerson)))return bad('助成率の部分が正しくありません。');
   const pr=o.pricing;
-  if(!pr||!isN(pr.perPersonFee)||!Array.isArray(pr.flatPlans)||!pr.flatPlans.every(x=>x&&isN(x.min)&&isN(x.max)&&isN(x.total))||!pr.sharoushiFee||!isN(pr.sharoushiFee.min)||!isN(pr.sharoushiFee.max))return bad('料金表の部分が正しくありません。');
-  if(!isN(o.freeSupportMinPeople))return bad('申請サポートの人数が正しくありません。');
+  if(!pr||!isN(pr.perPersonFee)||!Array.isArray(pr.flatPlans)||!pr.flatPlans.every(x=>x&&isN(x.min)&&isN(x.max)&&isN(x.total)))return bad('料金表の部分が正しくありません。');
   const rr=k=>({expenseRate:rt[k].expenseRate,wagePerHour:rt[k].wagePerHour,expenseCapPerPerson:rt[k].expenseCapPerPerson});
   return {ok:{
     rates:{sme:rr('sme'),large:rr('large')},
-    pricing:{perPersonFee:pr.perPersonFee,flatPlans:pr.flatPlans.map(x=>({min:x.min,max:x.max,total:x.total})),sharoushiFee:{min:pr.sharoushiFee.min,max:pr.sharoushiFee.max}},
-    freeSupportMinPeople:o.freeSupportMinPeople}};
+    pricing:{perPersonFee:pr.perPersonFee,flatPlans:pr.flatPlans.map(x=>({min:x.min,max:x.max,total:x.total}))}}};
 }
 
 /* ================= 助成金 ================= */
@@ -696,11 +693,7 @@ function judge(){
     if(n===0||eligible===0)add('check','受講者','対象は、雇用保険の被保険者で役員でない方とされています。入力では該当する方がいないため、社労士にご確認ください。');
     else if(eligible<n)add('check','受講者',`受講${n}名のうち、雇用保険の被保険者で役員でない方は${eligible}名という入力です。役員（${ex}名）や、雇用保険に未加入の方（週20時間未満のパート・アルバイトなど）の扱いは、社労士にご確認ください。`);
     else add('ok','受講者',`受講${n}名全員が、雇用保険の被保険者で役員ではない、という入力です。`);
-    if(HQ){
-      const sf=HQ.pricing.sharoushiFee;
-      if(n>=HQ.freeSupportMinPeople)add('ok','申請サポート',`受講者が${HQ.freeSupportMinPeople}名以上のため、TRIPORTの申請サポート費用は学校負担です。`);
-      else add('info','申請サポート',`受講者が${HQ.freeSupportMinPeople-1}名以下の場合、社労士フィー（${yen(sf.min)}〜${yen(sf.max)}、税別）は受講企業の負担です。`);
-    }else add('info','申請サポート','申請サポートの費用を誰が負担するかは、受講人数で変わります。本部の資料で確認してください。');
+    add('info','申請サポート','TRIPORTの申請サポート費用が別に必要です。金額は本部に確認してください。');
   }
 
   if($('s-excl').value==='y')add('check','対象外の業種','接待を伴う飲食業、性風俗関連、暴力団関係は、対象外とされている業種です。入力では当たるため、社労士にご確認ください。');
@@ -709,7 +702,6 @@ function judge(){
   const pick=(id,t,map)=>{const v=$(id).value;if(v==='')add('todo',t,'選択してください。');else add(...map[v])};
   pick('s-labor','労務管理',{y:['ok','労務管理','適切に行っている、という入力です。'],u:['check','労務管理','社会保険料・残業代の支払い、法令違反がないかは、社労士にご確認ください。'],n:['check','労務管理','労務管理の状況は、助成の要件に関わるとされています。社労士にご確認ください。']});
   pick('s-course','対象コース',{y:['ok','対象コース',`対象コース（${SUB.targetCourse}）を受講する、という入力です。`],u:['check','対象コース',`対象は${SUB.targetCourse}とされています。受講するコースをご確認ください。`],n:['check','対象コース',`対象は${SUB.targetCourse}とされています。それ以外のコースの扱いは、社労士にご確認ください。`]});
-  pick('s-tele','オンライン受講の場所',{y:['ok','オンライン受講の場所','自宅などで受講する人がいて、就業規則にテレワーク規定がある、という入力です。'],off:['ok','オンライン受講の場所','全員、会社の事業所内で受講する、という入力です。'],u:['check','オンライン受講の場所','自宅などで受講する人がいる場合の、就業規則のテレワーク規定の扱いは、社労士にご確認ください。'],n:['check','オンライン受講の場所','自宅などで受講する人がいる場合の、就業規則のテレワーク規定の扱いは、社労士にご確認ください。']});
   pick('s-hours','受講時間',{y:['ok','受講時間',`所定労働時間内に1人${SUB.minHoursPerPerson}時間以上を確保できる、という入力です。事業所が複数ある場合（雇用保険の適用事業所番号が異なる場合）の扱いは、社労士にご確認ください。`],u:['check','受講時間',`所定労働時間内の受講時間の確保（1人${SUB.minHoursPerPerson}時間以上）や、業務をしながらの視聴の扱いは、社労士にご確認ください。`],n:['check','受講時間',`所定労働時間内に1人${SUB.minHoursPerPerson}時間以上を確保することが、要件とされています。社労士にご確認ください。`]});
 
   const sd=$('s-start').value;
@@ -734,8 +726,7 @@ function moneyBlock(eligible,n){
   const pay=plan?plan.total:fee*n, perPerson=n>0?pay/n:0;
   let e1=perPerson*(1+SUB.taxRate)*rate; if(c1!==null)e1=Math.min(e1,c1);
   const keihi=e1*eligible, chingin=wage*vh*eligible;
-  const sf=(HQ&&n>0&&n<HQ.freeSupportMinPeople)?HQ.pricing.sharoushiFee:null;
-  return {eligible,pay,keihi,chingin,plan,sf,after:Math.max(0,pay-keihi)};
+  return {eligible,pay,keihi,chingin,plan,after:Math.max(0,pay-keihi)};
 }
 
 function calcSub(){
@@ -751,16 +742,15 @@ function calcSub(){
   $('s-money').innerHTML=m?`<h3>金額の目安（対象${m.eligible}名・上限や審査の結果によって変わります）</h3>
     <dl class="kv"><dt>受講料の支払い（税抜・全員分・先払い）${m.plan?`<br><small>${m.plan.min}〜${m.plan.max}名の定額プランを適用</small>`:''}</dt><dd>${yen(m.pay)}</dd>
     <dt>経費助成の見込み（後払い）</dt><dd>${yen(m.keihi)}</dd>
-    <dt>助成が支給された場合の会社の負担（税抜${m.sf?'・社労士フィー別':''}）</dt><dd>${yen(m.after)}</dd>
-    <dt>支給されなかった場合の会社の負担${m.sf?'（社労士フィー別）':''}</dt><dd>${yen(m.pay)}</dd>
-    ${m.sf?`<dt>社労士フィー（受講企業の負担・税別）</dt><dd>${yen(m.sf.min)}〜${yen(m.sf.max)}</dd>`:''}
+    <dt>助成が支給された場合の会社の負担（税抜・申請サポート費用別）</dt><dd>${yen(m.after)}</dd>
+    <dt>支給されなかった場合の会社の負担（申請サポート費用別）</dt><dd>${yen(m.pay)}</dd>
     <dt>参考：賃金助成の見込み<span class="chk">要確認</span>（上の負担には含めていません）</dt><dd>${yen(m.chingin)}</dd></dl>
     <div class="after">助成金は研修終了後の後払いです。審査の結果、支給されない場合があります。</div>`
     :(HQ?'':'<p class="hint">金額の目安を出すには、右上の「設定」に設定コードを貼るか、受講料・助成率などを直接入力してください。</p>');
 
   const lines=[`【助成金 確認事項メモ】${SUB.courseName}（${SUB.validUntilLabel}まで）`,'このメモは、助成の対象かどうかを判断するものではありません。対象かどうか・要件の解釈は、社労士にご確認ください。',`入力内容の整理：${label}`,'',
     ...R.map(r=>`・[${TAG[r.lv]}] ${r.t}：${r.m}`)];
-  if(m)lines.push('',`金額の目安（対象${m.eligible}名）`,`・受講料の先払い（税抜${m.plan?`、${m.plan.min}〜${m.plan.max}名の定額プラン`:''}）：${yen(m.pay)}`,`・経費助成の見込み（後払い）：${yen(m.keihi)}（助成率${$('s-rate').value||0}%、1人あたり年間上限${yen(val('s-cap1')||0)}）`,`・助成が支給された場合の会社の負担${m.sf?'（社労士フィー別）':''}：${yen(m.after)}`,`・支給されなかった場合の会社の負担${m.sf?'（社労士フィー別）':''}：${yen(m.pay)}`,...(m.sf?[`・社労士フィー（受講企業の負担・税別）：${yen(m.sf.min)}〜${yen(m.sf.max)}`]:[]),`・参考：賃金助成の見込み ${yen(m.chingin)}（要確認・上の負担には含めていません）`);
+  if(m)lines.push('',`金額の目安（対象${m.eligible}名）`,`・受講料の先払い（税抜${m.plan?`、${m.plan.min}〜${m.plan.max}名の定額プラン`:''}）：${yen(m.pay)}`,`・経費助成の見込み（後払い）：${yen(m.keihi)}（助成率${$('s-rate').value||0}%、1人あたり年間上限${yen(val('s-cap1')||0)}）`,`・助成が支給された場合の会社の負担（申請サポート費用別）：${yen(m.after)}`,`・支給されなかった場合の会社の負担（申請サポート費用別）：${yen(m.pay)}`,`・TRIPORTの申請サポート費用が別に必要です。金額は本部に確認してください。`,`・参考：賃金助成の見込み ${yen(m.chingin)}（要確認・上の負担には含めていません）`);
   lines.push('',`※${SUB.disclaimer}`);
   $('s-memo').value=lines.join('\n');
 }
@@ -790,7 +780,7 @@ function applySettings(h){
   if(HQ&&$('s-fee').value==='')$('s-fee').value=HQ.pricing.perPersonFee;
   applyRateDefaults(true);calcSub();
 }
-['s-org','s-sector','s-emp','s-cap','s-n','s-ins','s-exec','s-labor','s-excl','s-course','s-tele','s-hours','s-start','s-fee','s-vh','s-rate','s-w','s-cap1'].forEach(id=>{
+['s-org','s-sector','s-emp','s-cap','s-n','s-ins','s-exec','s-labor','s-excl','s-course','s-hours','s-start','s-fee','s-vh','s-rate','s-w','s-cap1'].forEach(id=>{
   const h=()=>{
     if(id==='s-rate')touched.rate=true;
     if(id==='s-w')touched.wage=true;

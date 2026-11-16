@@ -225,13 +225,11 @@ body.rep-open{overflow:hidden}
    <details open><summary>金額の目安を出す（任意）</summary>
      <div class="row">
        <div><label for="s-fee">受講料（1人あたり・税抜・円）</label><input type="number" id="s-fee" min="0" placeholder="税抜の金額を入力" inputmode="numeric"><p class="hint" id="s-fee-hint"></p></div>
-       <div><label for="s-vh">助成対象の受講時間（時間）</label><input type="number" id="s-vh" min="0"></div>
        <div><label for="s-rate">経費助成率（%）</label><input type="number" id="s-rate" min="0" max="100" inputmode="numeric"></div>
-       <div><label for="s-w">賃金助成（円/人/時間）<span class="chk">要確認</span></label><input type="number" id="s-w" min="0" inputmode="numeric"></div>
        <div><label for="s-cap1">経費助成の1人あたり年間上限（円）</label><input type="number" id="s-cap1" min="0" inputmode="numeric"></div>
      </div>
      <p class="hint" id="s-rate-hint"></p>
-     <button class="btn ghost sm" id="s-rate-reset" type="button">助成率・賃金助成を初期値に戻す</button>
+     <button class="btn ghost sm" id="s-rate-reset" type="button">助成率・上限を初期値に戻す</button>
    </details>
   </div>
   <div class="panel result" aria-live="polite">
@@ -656,17 +654,17 @@ function parseSettings(text){
   let o;try{o=JSON.parse(text)}catch(e){return bad('設定コードの形式が正しくありません。コード全体をそのまま貼ってください。')}
   const isN=v=>typeof v==='number'&&isFinite(v)&&v>=0;
   const rt=o&&o.rates;
-  if(!rt||!['sme','large'].every(k=>rt[k]&&isN(rt[k].expenseRate)&&rt[k].expenseRate<=100&&isN(rt[k].wagePerHour)&&isN(rt[k].expenseCapPerPerson)))return bad('助成率の部分が正しくありません。');
+  if(!rt||!['sme','large'].every(k=>rt[k]&&isN(rt[k].expenseRate)&&rt[k].expenseRate<=100&&isN(rt[k].expenseCapPerPerson)))return bad('助成率の部分が正しくありません。');
   const pr=o.pricing;
   if(!pr||!isN(pr.perPersonFee)||!Array.isArray(pr.flatPlans)||!pr.flatPlans.every(x=>x&&isN(x.min)&&isN(x.max)&&isN(x.total)))return bad('料金表の部分が正しくありません。');
-  const rr=k=>({expenseRate:rt[k].expenseRate,wagePerHour:rt[k].wagePerHour,expenseCapPerPerson:rt[k].expenseCapPerPerson});
+  const rr=k=>({expenseRate:rt[k].expenseRate,expenseCapPerPerson:rt[k].expenseCapPerPerson});
   return {ok:{
     rates:{sme:rr('sme'),large:rr('large')},
     pricing:{perPersonFee:pr.perPersonFee,flatPlans:pr.flatPlans.map(x=>({min:x.min,max:x.max,total:x.total}))}}};
 }
 
 /* ================= 助成金 ================= */
-const touched={rate:false,wage:false,cap:false};
+const touched={rate:false,cap:false};
 let isLarge=false;
 const TAG={ok:'入力内容',check:'社労士に確認',ng:'社労士に確認',todo:'未入力',info:'参考'};
 const fmtDate=x=>`${x.getFullYear()}年${x.getMonth()+1}月${x.getDate()}日`;
@@ -719,14 +717,14 @@ function judge(){
 function moneyBlock(eligible,n){
   const fee=val('s-fee');
   if(fee===null||eligible===null||n===null||$('s-rate').value==='')return null;
-  const rate=clamp(num($('s-rate').value),0,100)/100, wage=num($('s-w').value), vh=num($('s-vh').value), c1=val('s-cap1');
+  const rate=clamp(num($('s-rate').value),0,100)/100, c1=val('s-cap1');
   // 計算式：「税込受講料 × 助成率」と「1人あたり年間上限」の低い方
   // 受講料が設定コードの初期値のままなら、人数に合う定額プランを自動で使う
   const P=HQ&&HQ.pricing, plan=(P&&fee===P.perPersonFee)?P.flatPlans.find(x=>n>=x.min&&n<=x.max):null;
   const pay=plan?plan.total:fee*n, perPerson=n>0?pay/n:0;
   let e1=perPerson*(1+SUB.taxRate)*rate; if(c1!==null)e1=Math.min(e1,c1);
-  const keihi=e1*eligible, chingin=wage*vh*eligible;
-  return {eligible,pay,keihi,chingin,plan,after:Math.max(0,pay-keihi)};
+  const keihi=e1*eligible;
+  return {eligible,pay,keihi,plan,after:Math.max(0,pay-keihi)};
 }
 
 function calcSub(){
@@ -744,13 +742,13 @@ function calcSub(){
     <dt>経費助成の見込み（後払い）</dt><dd>${yen(m.keihi)}</dd>
     <dt>助成が支給された場合の会社の負担（税抜・申請サポート費用別）</dt><dd>${yen(m.after)}</dd>
     <dt>支給されなかった場合の会社の負担（申請サポート費用別）</dt><dd>${yen(m.pay)}</dd>
-    <dt>参考：賃金助成の見込み<span class="chk">要確認</span>（上の負担には含めていません）</dt><dd>${yen(m.chingin)}</dd></dl>
+    </dl>
     <div class="after">助成金は研修終了後の後払いです。審査の結果、支給されない場合があります。</div>`
     :(HQ?'':'<p class="hint">金額の目安を出すには、右上の「設定」に設定コードを貼るか、受講料・助成率などを直接入力してください。</p>');
 
   const lines=[`【助成金 確認事項メモ】${SUB.courseName}（${SUB.validUntilLabel}まで）`,'このメモは、助成の対象かどうかを判断するものではありません。対象かどうか・要件の解釈は、社労士にご確認ください。',`入力内容の整理：${label}`,'',
     ...R.map(r=>`・[${TAG[r.lv]}] ${r.t}：${r.m}`)];
-  if(m)lines.push('',`金額の目安（対象${m.eligible}名）`,`・受講料の先払い（税抜${m.plan?`、${m.plan.min}〜${m.plan.max}名の定額プラン`:''}）：${yen(m.pay)}`,`・経費助成の見込み（後払い）：${yen(m.keihi)}（助成率${$('s-rate').value||0}%、1人あたり年間上限${yen(val('s-cap1')||0)}）`,`・助成が支給された場合の会社の負担（申請サポート費用別）：${yen(m.after)}`,`・支給されなかった場合の会社の負担（申請サポート費用別）：${yen(m.pay)}`,`・TRIPORTの申請サポート費用が別に必要です。`,`・参考：賃金助成の見込み ${yen(m.chingin)}（要確認・上の負担には含めていません）`);
+  if(m)lines.push('',`金額の目安（対象${m.eligible}名）`,`・受講料の先払い（税抜${m.plan?`、${m.plan.min}〜${m.plan.max}名の定額プラン`:''}）：${yen(m.pay)}`,`・経費助成の見込み（後払い）：${yen(m.keihi)}（助成率${$('s-rate').value||0}%、1人あたり年間上限${yen(val('s-cap1')||0)}）`,`・助成が支給された場合の会社の負担（申請サポート費用別）：${yen(m.after)}`,`・支給されなかった場合の会社の負担（申請サポート費用別）：${yen(m.pay)}`,`・TRIPORTの申請サポート費用が別に必要です。`);
   lines.push('',`※${SUB.disclaimer}`);
   $('s-memo').value=lines.join('\n');
 }
@@ -758,32 +756,30 @@ function calcSub(){
 function applyRateDefaults(force){
   const L=n=>n.toLocaleString('ja-JP');
   if(!HQ){
-    $('s-rate-hint').textContent='助成率・上限・賃金助成の数字は、このツールのファイルには入っていません。右上の「設定」に設定コードを貼ると、初期値が入ります。数字を直接入力しても計算できます。賃金助成は「要確認」のため、会社の負担の計算には含めていません。';
+    $('s-rate-hint').textContent='助成率・上限の数字は、このツールのファイルには入っていません。右上の「設定」に設定コードを貼ると、初期値が入ります。数字を直接入力しても計算できます。';
     $('s-fee-hint').textContent='';
     return;
   }
   const d=isLarge?HQ.rates.large:HQ.rates.sme;
   if(force||!touched.rate)$('s-rate').value=d.expenseRate;
-  if(force||!touched.wage)$('s-w').value=d.wagePerHour;
   if(force||!touched.cap)$('s-cap1').value=d.expenseCapPerPerson;
-  if(force){touched.rate=touched.wage=touched.cap=false}
+  if(force){touched.rate=touched.cap=false}
   $('s-fee-hint').textContent=`${L(HQ.pricing.perPersonFee)}円のままなら、${Math.min(...HQ.pricing.flatPlans.map(x=>x.min))}名以上は定額プランを自動で使います。`;
-  $('s-rate-hint').textContent=`初期値は中小企業 ${HQ.rates.sme.expenseRate}%・${L(HQ.rates.sme.wagePerHour)}円/時間・上限${L(HQ.rates.sme.expenseCapPerPerson)}円、大企業 ${HQ.rates.large.expenseRate}%・${L(HQ.rates.large.wagePerHour)}円/時間・上限${L(HQ.rates.large.expenseCapPerPerson)}円です。助成額は「税込受講料×助成率」と上限の低い方です。賃金助成は「要確認」のため、会社の負担の計算には含めていません。`;
+  $('s-rate-hint').textContent=`初期値は中小企業 ${HQ.rates.sme.expenseRate}%・上限${L(HQ.rates.sme.expenseCapPerPerson)}円、大企業 ${HQ.rates.large.expenseRate}%・上限${L(HQ.rates.large.expenseCapPerPerson)}円です。助成額は「税込受講料×助成率」と上限の低い方です。`;
 }
 function applySettings(h){
   const prev=HQ;HQ=h;
   if(!HQ){
-    ['s-rate','s-w','s-cap1'].forEach(id=>{$(id).value=''});
+    ['s-rate','s-cap1'].forEach(id=>{$(id).value=''});
     if(prev&&+$('s-fee').value===prev.pricing.perPersonFee)$('s-fee').value='';
-    touched.rate=touched.wage=touched.cap=false;
+    touched.rate=touched.cap=false;
   }
   if(HQ&&$('s-fee').value==='')$('s-fee').value=HQ.pricing.perPersonFee;
   applyRateDefaults(true);calcSub();
 }
-['s-org','s-sector','s-emp','s-cap','s-n','s-ins','s-exec','s-labor','s-excl','s-course','s-hours','s-start','s-fee','s-vh','s-rate','s-w','s-cap1'].forEach(id=>{
+['s-org','s-sector','s-emp','s-cap','s-n','s-ins','s-exec','s-labor','s-excl','s-course','s-hours','s-start','s-fee','s-rate','s-cap1'].forEach(id=>{
   const h=()=>{
     if(id==='s-rate')touched.rate=true;
-    if(id==='s-w')touched.wage=true;
     if(id==='s-cap1')touched.cap=true;
     calcSub();applyRateDefaults(false);calcSub();
   };
@@ -826,7 +822,6 @@ $('s-note').textContent=SUB.disclaimer;
 $('s-intro').textContent=`対象：${SUB.courseName}（${SUB.validUntilLabel}まで）`;
 $('s-course').querySelector('option[value="y"]').textContent=SUB.targetCourse;
 $('s-hours-l').textContent=`所定労働時間内に、通常業務と切り離して1人${SUB.minHoursPerPerson}時間以上を確保できる`;
-$('s-vh').value=SUB.minHoursPerPerson;
 loadIndustry();H.set([]);
 {
   let h=null;const raw=store.get(KEY_SET);
